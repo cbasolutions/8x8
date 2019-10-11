@@ -11,6 +11,6 @@ while IFS=, read -r FN LN EM UN EID
 do
   echo ${FN} ${LN} ${EM} ${UN} ${EID}
   data='{"userName":"'${UN}'","name": {"familyName":"'${LN}'","givenName":"'${FN}'"},"active": true,"locale": "en-US","emails": [{"value": "'${EM}'","type": "work","primary": true}],"externalId":"'${EID}'"}'
-  curl https://platform.8x8.com/udi/customers/0012J00002IYRgcQAH/scim/v2/Users -H "Accept: application/json" -H "Content-type: application/json" -H "Authorization: Bearer IPmC5dAbjyrA5dJRy3AzuPqD2Q==" -X POST -d "${data}" 
+  curl ${url} -H ${headers} -X POST -d "${data}" 
 done
 } < 8x8_import_template.csv
