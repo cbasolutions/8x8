@@ -1,4 +1,9 @@
 <?php
+  /*
+    This script is based on a script provided by 8x8 which demonstrated how to connect to the API. 
+    It has been extended to process the data into a CSV and has processed requests which have exceeded 31MM rows of response.
+  */
+
 	function debug($mixed = null, $line = null) {
 		/*
 			function to display debug information in a human readable format on the screen 
