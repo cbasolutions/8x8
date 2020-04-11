@@ -14,7 +14,7 @@ The current API endpoints:
 
 **Release History**
 
-  * 2020-04-11 Release of 8x8_VOA_CDR.php
+  * 2020-04-11 - Release of 8x8_VOA_CDR.php
 
     * 8x8_VOA_CDR.php will produce a CSV of all available fields returned from the Call Detail Records endpoint
     * It is a PHP CLI script which has been tested on MacOS Mojave 10.15.4 using PHP 7.3.11
