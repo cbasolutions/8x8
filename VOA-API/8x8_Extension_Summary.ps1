@@ -82,7 +82,7 @@ $token = Get-Token -userName $userName -userPassword $userPassword -apiKey $apiK
 ## Get Report
 If (-Not $startTime) { 
   if ($reportDaysDuration) {
-    $startTime = [DateTime]::Today.AddDays($reportDaysDuration)
+    $startTime = [DateTime]::Today.AddDays(-$reportDaysDuration)
   } else {
     $startTime = New-Object -Type DateTime -ArgumentList 1970, 1, 1, 0, 0, 0, 0
   }
