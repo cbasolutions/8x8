@@ -7,9 +7,9 @@
     Current supported values: Cdr, ExtSum
 .NOTES
     Author: Brandon Jenkins, CBA Solutions
-    Date:   June 29, 2021
+    Date:   July 2, 2021
 .VERSION
-    .2 
+    .3 
 #>
 
 param (
@@ -35,7 +35,7 @@ param (
   [String] $reportInterval = "Daily",
   [Parameter(Mandatory=$true,HelpMessage="Supported valeus: Cdr, ExtSum")]
   [String] $reportType,
-  [Parameter(Mandatory=$false,HelpMessage="Supported valeus: Cdr, Email")]
+  [Parameter(Mandatory=$false,HelpMessage="Supported valeus: Csv, Email")]
   [String] $reportOutput = "Csv"
 )
 
@@ -149,7 +149,12 @@ function Save-to-CSV {
     $reportName = "$reportPath\" + $reportType + "_output_$($currentTime.toString('yyyy-MM-dd_HHmmss')).csv"
     $reportName
     If ( -Not $(Test-Path $reportPath -PathType Container)) { New-Item -ItemType Directory -Path $reportPath }  
-    $reportData | Export-CSV -NoTypeInformation -Path $ReportName
+    $reportData | % {
+      $result = $_ | Select-Object * -ExcludeProperty Branches, Departments
+      $result | Add-Member -Name "Branches" -Value $($_.Branches -join "; " ) -MemberType NoteProperty
+      $result | Add-Member -Name "Departments" -Value $( $_.Departments -join "; " ) -MemberType NoteProperty
+      return $result
+    } | Export-Csv -Path $ReportName -Encoding UTF8 -NoTypeInformation
 }
 
 ## Stackoverflow example on sending CSV inline https://stackoverflow.com/questions/13648761/how-can-i-chain-export-csv-to-send-mailmessage-without-having-to-save-the-csv-to/62535823#62535823
@@ -164,6 +169,12 @@ Param(
     If ($Delimiter -eq $null){$Delimiter = ","}
     $MS = [System.IO.MemoryStream]::new()
     $SW = [System.IO.StreamWriter]::new($MS)
+    $PSObject = $PSObject | % {
+      $result = $_ | Select-Object * -ExcludeProperty Branches, Departments
+      $result | Add-Member -Name "Branches" -Value $($_.Branches -join "; " ) -MemberType NoteProperty
+      $result | Add-Member -Name "Departments" -Value $( $_.Departments -join "; " ) -MemberType NoteProperty
+      return $result
+    }
     $SW.Write([String]($PSObject | convertto-csv -NoTypeInformation -Delimiter $Delimiter | % {($_).replace('"','') + [System.Environment]::NewLine}))
     $SW.Flush()
     $MS.Seek(0,"Begin") | Out-Null
@@ -229,7 +240,7 @@ if ($PSVersionTable.PSVersion.Major -ge 5) {
       Save-to-CSV -reportData $reportData
     }
     "Email" {
-      $EmailAttachment = ConvertTo-CSVEmailAttachment -FileName $($reportType + "_output_$($currentTime.toString('yyyy-MM-dd_HHmmss')).csv") -PSObject $reportData
+      $EmailAttachment = ConvertTo-CSVEmailAttachment -FileName $($reportType + "_output_$($currentTime.toString('yyyy-MM-dd_HHmmss')).csv") -PSObject $reportData -Delimiter "|"
       $SMTPserver = ""
       $from = ""
       $to = ""
