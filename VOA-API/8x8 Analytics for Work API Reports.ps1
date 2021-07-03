@@ -236,7 +236,7 @@ if ($PSVersionTable.PSVersion.Major -ge 5) {
         Write-Host "Remaining Records "$reportRecordCount
         While ($scrollId -ne "No Data") {
           $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $scrollId
-          If ($reportJSON = 401) {
+          If ($reportJSON -eq 401) {
             Write-Host "Refreshing Token"
             $token = Get-Token -userName $userName -userPassword $userPassword -apiKey $apiKey -authURL $authURL
             $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $scrollId  
@@ -245,7 +245,6 @@ if ($PSVersionTable.PSVersion.Major -ge 5) {
           $reportRecordCount = $reportRecordCount - 7000
           Write-Host "Remaining Records "$reportRecordCount
           $reportData = $reportData + $reportJSON.data
-          Break
         }
       }
     }
