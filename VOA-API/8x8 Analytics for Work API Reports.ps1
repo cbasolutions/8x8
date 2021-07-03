@@ -7,18 +7,18 @@
     Current supported values: Cdr, ExtSum
 .NOTES
     Author: Brandon Jenkins, CBA Solutions
-    Date:   July 2, 2021
+    Date:   July 3, 2021
 .VERSION
-    .3 
+    .4
 #>
 
 param (
   [Parameter(Mandatory=$true)]
-  $apiKey,
+  $apiKey = "",
   [Parameter(Mandatory=$true)]
-  $userName,
+  $userName = "",
   [Parameter(Mandatory=$true)]
-  $userPassword,
+  $userPassword = "",
   [Parameter()]
   $pbxId= "allpbxes",
   [Parameter()]
@@ -34,7 +34,7 @@ param (
   [Parameter(HelpMessage="Supported valeus: Daily, Hourly")]
   [String] $reportInterval = "Daily",
   [Parameter(Mandatory=$true,HelpMessage="Supported valeus: Cdr, ExtSum")]
-  [String] $reportType,
+  [String] $reportType = "",
   [Parameter(Mandatory=$false,HelpMessage="Supported valeus: Csv, Email")]
   [String] $reportOutput = "Csv"
 )
@@ -136,7 +136,13 @@ function Get-Cdr {
       Method = 'GET'
     }
 
-    Invoke-RestMethod @params
+    Try {
+      Invoke-RestMethod @params
+    } Catch {
+      if($_.Exception.Response.StatusCode.value__) {
+        $_.Exception.Response.StatusCode.value__
+      }
+    }
 }
 
 function Save-to-CSV {
@@ -219,14 +225,28 @@ if ($PSVersionTable.PSVersion.Major -ge 5) {
     "ExtSum" {
       $reportJSON = Get-ExtSum -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId
       $reportData = $reportJSON
-      $reportData
     }
     "Cdr" {
       $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId
-      $reportData = $reportJSON.data
-      While ($reportJSON.meta.scrollId -ne "No Data") {
-        $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $reportJSON.meta.scrollId
-        $reportData = $reportData + $reportJSON.data
+      If ( $reportJSON.data ) {
+        $scrollId = $reportJSON.meta.scrollId
+        $reportData = $reportJSON.data
+        [Int]$reportRecordCount = $reportJSON.meta.totalRecordCount
+        $reportRecordCount = $reportRecordCount - 7000
+        Write-Host "Remaining Records "$reportRecordCount
+        While ($scrollId -ne "No Data") {
+          $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $scrollId
+          If ($reportJSON = 401) {
+            Write-Host "Refreshing Token"
+            $token = Get-Token -userName $userName -userPassword $userPassword -apiKey $apiKey -authURL $authURL
+            $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $scrollId  
+          }
+          $scrollId = $reportJSON.meta.scrollId
+          $reportRecordCount = $reportRecordCount - 7000
+          Write-Host "Remaining Records "$reportRecordCount
+          $reportData = $reportData + $reportJSON.data
+          Break
+        }
       }
     }
     Default {
