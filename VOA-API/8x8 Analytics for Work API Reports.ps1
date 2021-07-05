@@ -7,18 +7,18 @@
     Current supported values: Cdr, ExtSum
 .NOTES
     Author: Brandon Jenkins, CBA Solutions
-    Date:   July 3, 2021
+    Date:   July 5, 2021
 .VERSION
-    .4
+    .5
 #>
 
 param (
-  [Parameter(Mandatory=$true)]
-  $apiKey = "",
-  [Parameter(Mandatory=$true)]
-  $userName = "",
-  [Parameter(Mandatory=$true)]
-  $userPassword = "",
+  [Parameter(Mandatory=$false)]
+  $global:apiKey = "",
+  [Parameter(Mandatory=$false)]
+  $global:userName = "",
+  [Parameter(Mandatory=$false)]
+  $global:userPassword = "",
   [Parameter()]
   $pbxId= "allpbxes",
   [Parameter()]
@@ -26,22 +26,28 @@ param (
   [Parameter()]
   $reportTimeZone = "UTC", 
   [Parameter()]
-  [DateTime] $startTime,
+  [DateTime] $startTime = "",
   [Parameter()]
-  [DateTime] $endTime,
+  [DateTime] $endTime = "",
   [Parameter()]
   [int] $reportDaysDuration,
   [Parameter(HelpMessage="Supported valeus: Daily, Hourly")]
   [String] $reportInterval = "Daily",
-  [Parameter(Mandatory=$true,HelpMessage="Supported valeus: Cdr, ExtSum")]
-  [String] $reportType = "",
+  [Parameter(Mandatory=$false,HelpMessage="Supported valeus: Cdr, ExtSum")]
+  [String] $reportType = "cdr",
   [Parameter(Mandatory=$false,HelpMessage="Supported valeus: Csv, Email")]
-  [String] $reportOutput = "Csv"
+  [String] $reportOutput = "Email",
+  [Parameter()]
+  [String]$global:emailSMTP= "",
+  [Parameter()]
+  [String]$global:emailFrom = "",
+  [Parameter()]
+  [String]$global:emailTo= ""
 )
 
 $reportURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/" + $reportType.ToLower()
 
-$authURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/oauth/token"
+$global:authURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/oauth/token"
 
 function Get-Token {
     [CmdletBinding()]
@@ -98,109 +104,188 @@ function Get-ExtSum {
 }
 
 function Get-Cdr {
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [String]$accessToken,
-        [Parameter(Mandatory)]
-        [String]$apiKey,
-        [Parameter(Mandatory)]
-        [String]$reportURL,
-        [Parameter(Mandatory)]
-        [DateTime]$startTime,
-        [Parameter(Mandatory)]
-        [DateTime]$endTime,
-        [Parameter(Mandatory)]
-        [String]$timeZone,
-        [Parameter(Mandatory)]
-        [String]$pbxId,
-        [Parameter()]
-        [Int]$pageSize = 7000,
-        [Parameter()]
-        [String]$scrollId,
-        [Parameter()]
-        [String]$isCallRecord = "false",
-        [Parameter()]
-        [String]$isSimplified = "false"
-    )
-    $Uri = $reportURL + "?pbxId=" + $pbxId + "&endTime=" + $endTime.ToString("yyyy-MM-dd HH:mm:ss") + "&startTime=" + $startTime.ToString("yyyy-MM-dd HH:mm:ss") + "&timeZone=" + $timeZone + "&pageSize=" + $pageSize + "&isCallRecord=" + $isCallRecord + "&isSimplified=" + $isSimplified
-    if ($scrollId -ne "") { 
-      $Uri = $Uri + "&scrollId=" + "$scrollId"
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory)]
+    [String]$accessToken,
+    [Parameter(Mandatory)]
+    [String]$apiKey,
+    [Parameter(Mandatory)]
+    [String]$reportURL,
+    [Parameter(Mandatory)]
+    [DateTime]$startTime,
+    [Parameter(Mandatory)]
+    [DateTime]$endTime,
+    [Parameter(Mandatory)]
+    [String]$timeZone,
+    [Parameter(Mandatory)]
+    [String]$pbxId,
+    [Parameter()]
+    [Int]$pageSize = 7000,
+    [Parameter()]
+    [String]$scrollId,
+    [Parameter()]
+    [String]$isCallRecord = "false",
+    [Parameter()]
+    [String]$isSimplified = "false"
+  )
+  $reportData = @()
+  $Uri = $reportURL + "?pbxId=" + $pbxId + "&endTime=" + $endTime.ToString("yyyy-MM-dd HH:mm:ss") + "&startTime=" + $startTime.ToString("yyyy-MM-dd HH:mm:ss") + "&timeZone=" + $timeZone + "&pageSize=" + $pageSize + "&isCallRecord=" + $isCallRecord + "&isSimplified=" + $isSimplified
+  $params = @{
+    Uri = $Uri
+    Headers = @{
+      'Authorization' = "Bearer " + $accessToken
+      '8x8-apikey' = $apiKey
     }
-    $params = @{
-      Uri = $Uri
-      Headers = @{
-        'Authorization' = "Bearer " + $accessToken
-        '8x8-apikey' = $apiKey
-      }
-      Method = 'GET'
-    }
-
+    Method = 'GET'
+  }
+  While ($reportJSON.meta.scrollId -ne "No Data") {
     Try {
-      Invoke-RestMethod @params
-    } Catch {
-      if($_.Exception.Response.StatusCode.value__) {
-        $_.Exception.Response.StatusCode.value__
+      $reportJSON = Invoke-RestMethod @params
+    }
+    Catch {
+      if ($_.Exception.Response.StatusCode.value__ -eq 401) {
+        $global:token = Get-Token -userName $global:userName -userPassword $global:userPassword -apiKey $globl:apiKey -authURL $global:authURL
+      } else {
+        Write-Host "Error Received"
+        Write-Host "StatusCode:" $_.Exception.Response.StatusCode.value__ 
+        Write-Host "StatusDescription:" $_.Exception.Response.StatusDescription
+        break
       }
     }
+    If ( -Not $reportJSON.meta.scrollId ) { $reportJSON = Invoke-RestMethod @params }
+    $reportData += $reportJSON.data | % {
+      $result = $_ | Select-Object * -ExcludeProperty Branches, Departments
+      $result | Add-Member -Name "Branches" -Value $($_.Branches -join "; " ) -MemberType NoteProperty
+      $result | Add-Member -Name "Departments" -Value $( $_.Departments -join "; " ) -MemberType NoteProperty
+      return $result
+    }
+    If ( $params.Uri.Contains("scrollId=") ) {
+      $params.Uri = $params.Uri.Replace($scrollId,$reportJSON.meta.scrollId)
+    } else {
+      $params.Uri = $params.Uri + "&scrollId=" + $reportJSON.meta.scrollId
+    }
+    $scrollId = $reportJSON.meta.scrollId
+  }
+  return $reportData
 }
 
 function Save-to-CSV {
   [CmdletBinding()]
     param(
       [Parameter(Mandatory)]
-      [Object]$reportData
+      [Object]$reportData,
+      [Parameter(Mandatory)]
+      [DateTime]$startTime,
+      [Parameter(Mandatory)]
+      [DateTime]$endTime
       )
     $reportPath = "$PSScriptRoot\Reports"
-    $reportName = "$reportPath\" + $reportType + "_output_$($currentTime.toString('yyyy-MM-dd_HHmmss')).csv"
-    $reportName
+    $reportName = "$reportPath\" + $reportType + "_output_$($startTime.toString('yyyy-MM-dd_HHmmss'))-$($endTime.toString('yyyy-MM-dd_HHmmss')).csv"
     If ( -Not $(Test-Path $reportPath -PathType Container)) { New-Item -ItemType Directory -Path $reportPath }  
-    $reportData | % {
-      $result = $_ | Select-Object * -ExcludeProperty Branches, Departments
-      $result | Add-Member -Name "Branches" -Value $($_.Branches -join "; " ) -MemberType NoteProperty
-      $result | Add-Member -Name "Departments" -Value $( $_.Departments -join "; " ) -MemberType NoteProperty
-      return $result
-    } | Export-Csv -Path $ReportName -Encoding UTF8 -NoTypeInformation
+    $reportData | Export-Csv -Path $ReportName -Encoding UTF8 -NoTypeInformation
 }
 
 ## Stackoverflow example on sending CSV inline https://stackoverflow.com/questions/13648761/how-can-i-chain-export-csv-to-send-mailmessage-without-having-to-save-the-csv-to/62535823#62535823
-function ConvertTo-CSVEmailAttachment {
+function Save-To-Email {
 Param(
     [Parameter(Mandatory=$true)]
     [String]$FileName,
     [Parameter(Mandatory=$true)]
-    [Object]$PSObject,
+    [String]$emailSubject,
+    [Parameter(Mandatory=$true)]
+    [String]$emailBody,
+    [Parameter(Mandatory=$true)]
+    [Object]$reportData,
     $Delimiter
     )
+    $FileName
     If ($Delimiter -eq $null){$Delimiter = ","}
     $MS = [System.IO.MemoryStream]::new()
     $SW = [System.IO.StreamWriter]::new($MS)
-    $PSObject = $PSObject | % {
-      $result = $_ | Select-Object * -ExcludeProperty Branches, Departments
-      $result | Add-Member -Name "Branches" -Value $($_.Branches -join "; " ) -MemberType NoteProperty
-      $result | Add-Member -Name "Departments" -Value $( $_.Departments -join "; " ) -MemberType NoteProperty
-      return $result
-    }
-    $SW.Write([String]($PSObject | convertto-csv -NoTypeInformation -Delimiter $Delimiter | % {($_).replace('"','') + [System.Environment]::NewLine}))
+    $SW.Write([String]($reportData | convertto-csv -NoTypeInformation -Delimiter $Delimiter | % {($_).replace('"','') + [System.Environment]::NewLine}))
     $SW.Flush()
     $MS.Seek(0,"Begin") | Out-Null
     $CT = [System.Net.Mime.ContentType]::new()
     $CT.MediaType = "text/csv"
-    Return [System.Net.Mail.Attachment]::new($MS,$FileName,$CT)
+    $mailer = new-object Net.Mail.SMTPclient($emailSMTP)
+    $msg = new-object Net.Mail.MailMessage($emailFrom, $emailTo, $emailSubject, $emailbody)
+    $msg.Attachments.Add([System.Net.Mail.Attachment]::new($MS,$FileName,$CT))
+    $msg.IsBodyHTML = $false
+    $mailer.send($msg)
 }
+
 
 if ($PSVersionTable.PSVersion.Major -ge 5) {
   
   ## Get Token
-  $token = Get-Token -userName $userName -userPassword $userPassword -apiKey $apiKey -authURL $authURL
+  $global:token = Get-Token -userName $userName -userPassword $userPassword -apiKey $apiKey -authURL $authURL
   
   ## Get Report
   $currentTime = Get-Date
   Switch ($reportInterval)
   {
     "Hourly" {
-      $startTime = (New-Object -Type DateTime -ArgumentList $currentTime.Year, $currentTime.Month, $currentTime.Day, $currentTime.Hour, 0, 0, 0).AddHours(-1)
-      $endTime = New-Object -Type DateTime -ArgumentList $currentTime.Year, $currentTime.Month, $currentTime.Day, $currentTime.Hour, 0, 0, 0
+      $requestStart = $startTime
+      If ( $endTime -lt $requestStart.AddHours(1).addSeconds(-1) ) {
+        $requestEnd = $endTime
+      } else {
+        $requestEnd = $requestStart.AddHours(1).addSeconds(-1)
+      }
+      While ( $requestStart -lt $endTime ) {
+        Switch ($reportType)
+        {
+          "ExtSum" {
+            $reportRequest = Get-ExtSum -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $requestStart -endTime $requestEnd -pbxId $pbxId
+          }
+          "Cdr" {
+            $reportRequest = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $requestStart -endTime $requestEnd -pbxId $pbxId
+          }
+          Default {
+            Write-Host "reportType: Current supported values: Cdr, ExtSum"
+            Break
+          }
+        }
+        #& Save-to-$reportOutput -reportData $reportRequest -startTime $requestStart -endTime $requestEnd
+        & Save-to-$reportOutput -reportData $reportRequest -FileName "$($reportType)_output_$($requestStart.toString('yyyy-MM-dd_HHmmss'))-$($requestEnd.toString('yyyy-MM-dd_HHmmss')).csv" -emailSubject "$reportType report for $requestStart - $requestEnd" -emailBody "`n`n`n`n`n`n`n`n`n`n`nGUID" -Delimiter "`t"
+        $requestStart = $requestEnd.AddSeconds(1)
+        If ( $endTime -lt $requestStart.AddHours(1).addSeconds(-1) ) {
+          $requestEnd = $endTime
+        } else {
+          $requestEnd = $requestStart.AddHours(1).addSeconds(-1)
+        }
+      }
+    }
+    "Daily" {
+      $requestStart = $startTime
+      If ( $endTime -lt $requestStart.AddDays(1).addSeconds(-1) ) {
+        $requestEnd = $endTime
+      } else {
+        $requestEnd = $requestStart.AddDays(1).addSeconds(-1)
+      }
+      While ( $requestStart -lt $endTime ) {
+        Switch ($reportType)
+        {
+          "ExtSum" {
+            $reportRequest = Get-ExtSum -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $requestStart -endTime $requestEnd -pbxId $pbxId
+          }
+          "Cdr" {
+            $reportRequest = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $requestStart -endTime $requestEnd -pbxId $pbxId
+          }
+          Default {
+            Write-Host "reportType: Current supported values: Cdr, ExtSum"
+            Break
+          }
+        }
+        & Save-to-$reportOutput -reportData $reportRequest -FileName "$($reportType)_output_$($requestStart.toString('yyyy-MM-dd_HHmmss'))-$($requestEnd.toString('yyyy-MM-dd_HHmmss')).csv" -emailSubject "$reportType report for $requestStart - $requestEnd" -emailBody "`n`n`n`n`n`n`n`n`n`n`nGUID" -Delimiter "|"
+        $requestStart = $requestEnd.AddSeconds(1)
+        If ( $endTime -lt $requestStart.AddDays(1).addSeconds(-1) ) {
+          $requestEnd = $endTime
+        } else {
+          $requestEnd = $requestStart.AddDays(1).addSeconds(-1)
+        }
+        $report = $report + $reportRequest
+      }
     }
     default {
       If (-Not $startTime) { 
@@ -217,60 +302,6 @@ if ($PSVersionTable.PSVersion.Major -ge 5) {
           $endTime = [datetime]::Now.ToUniversalTime()
         }
       }
-    }
-  }
-  
-  Switch ($reportType)
-  {
-    "ExtSum" {
-      $reportJSON = Get-ExtSum -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId
-      $reportData = $reportJSON
-    }
-    "Cdr" {
-      $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId
-      If ( $reportJSON.data ) {
-        $scrollId = $reportJSON.meta.scrollId
-        $reportData = $reportJSON.data
-        [Int]$reportRecordCount = $reportJSON.meta.totalRecordCount
-        $reportRecordCount = $reportRecordCount - 7000
-        Write-Host "Remaining Records "$reportRecordCount
-        While ($scrollId -ne "No Data") {
-          $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $scrollId
-          If ($reportJSON -eq 401) {
-            Write-Host "Refreshing Token"
-            $token = Get-Token -userName $userName -userPassword $userPassword -apiKey $apiKey -authURL $authURL
-            $reportJSON = Get-Cdr -accessToken $token.access_token -apiKey $apiKey -reportURL $reportURL -timeZone $reportTimeZone -startTime $startTime -endTime $endTime -pbxId $pbxId -scrollId $scrollId  
-          }
-          $scrollId = $reportJSON.meta.scrollId
-          $reportRecordCount = $reportRecordCount - 7000
-          Write-Host "Remaining Records "$reportRecordCount
-          $reportData = $reportData + $reportJSON.data
-        }
-      }
-    }
-    Default {
-      Write-Host "reportType: Current supported values: Cdr, ExtSum"
-      Break
-    }
-  }
-  
-  Switch ($reportOutput) {
-    "Csv" {
-      Save-to-CSV -reportData $reportData
-    }
-    "Email" {
-      $EmailAttachment = ConvertTo-CSVEmailAttachment -FileName $($reportType + "_output_$($currentTime.toString('yyyy-MM-dd_HHmmss')).csv") -PSObject $reportData -Delimiter "|"
-      $SMTPserver = ""
-      $from = ""
-      $to = ""
-      $subject = "Emailing the " + $reportType + " report"
-      $emailbody = "Please see the attached"
-  
-      $mailer = new-object Net.Mail.SMTPclient($SMTPserver)
-      $msg = new-object Net.Mail.MailMessage($from, $to, $subject, $emailbody)
-      $msg.Attachments.Add($EmailAttachment) #### This uses the attachment made using the function above. 
-      $msg.IsBodyHTML = $false
-      $mailer.send($msg)
     }
   }
 } else {
