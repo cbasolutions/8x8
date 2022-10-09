@@ -45,9 +45,9 @@ param (
   [String]$global:emailTo= ""
 )
 
-$reportURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/" + $reportType.ToLower()
+$reportURL = "https://api.8x8.com/analytics/work/" + $apiVersion + "/" + $reportType.ToLower()
 
-$global:authURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/oauth/token"
+$global:authURL = "https://api.8x8.com/analytics/work/" + $apiVersion + "/oauth/token"
 
 function Get-Token {
     [CmdletBinding()]
