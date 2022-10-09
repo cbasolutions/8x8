@@ -20,8 +20,8 @@ param (
   [int] $reportDaysDuration
 )
 
-$reportURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/extsum"
-$authURL = "https://8x8gateway-prod.apigee.net/analytics/" + $apiVersion + "/oauth/token"
+$reportURL = "https://api.8x8.com/analytics/work/" + $apiVersion + "/extsum"
+$authURL = "https://api.8x8.com/analytics/work/" + $apiVersion + "/oauth/token"
 
 function Get-Token {
     [CmdletBinding()]
