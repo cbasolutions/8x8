@@ -31,7 +31,7 @@
 				Example: "username=hugotestpbx.1012&password=Pass1234!" header option: "8x8-apikey: <8x8_apikey>"
 
 			URL:
-				https://8x8gateway-prod.apigee.net/analytics/v1/oauth/token
+				https://api.8x8.com/analytics/work/v1/oauth/token
 
 			Returns:
 				access_token (string): The access token used for 8x8 API calls. 
@@ -72,7 +72,7 @@
 		if($return["success"] == true){
 		
 		//set up cURL
-		$url = "https://8x8gateway-prod.apigee.net/analytics/".$config["voa"]["version"]."/oauth/token";
+		$url = "https://api.8x8.com/analytics/work/".$config["voa"]["version"]."/oauth/token";
 		$header = [
 		  "8x8-apikey: ".$config["voa"]["8x8-apikey"]
 		];
@@ -147,7 +147,7 @@
 			header option: "8x8-apikey: <8x8_apikey>"
 			
 			URL:
-				https://8x8gateway-prod.apigee.net/analytics/v1/oauth/token
+				https://api.8x8.com/analytics/work/v1/oauth/token
 				
 			Returns:
 			
@@ -228,7 +228,7 @@
 			$getString = implode("&", $getArray);
 			
 			//set up cURL
-			$url = "https://8x8gateway-prod.apigee.net/analytics/".$config["voa"]["version"]."/cdr?".$getString;
+			$url = "https://api.8x8.com/analytics/work/".$config["voa"]["version"]."/cdr?".$getString;
 			$header = [
 				"Authorization: Bearer ".$config["voa"]["access_token"], 
 				"8x8-apikey: ".$config["voa"]["8x8-apikey"]
